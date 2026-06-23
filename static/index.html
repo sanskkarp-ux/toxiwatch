@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ToxiWatch — Multilingual Comment Moderator</title>
+
+  <!-- Google Fonts: Syne (display) + Inter (body) — chosen for a data-product feel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ══════════════════════════════════════════════════════════════════
+       DESIGN TOKENS — all colors, fonts, and spacings defined here.
+       Change these variables to re-skin the whole app instantly.
+    ══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg:          #0d0f14;      /* Near-black background */
+      --surface:     #161920;      /* Card / panel background */
+      --surface-2:   #1e2230;      /* Slightly lighter surface */
+      --border:      #2a2f42;      /* Subtle border color */
+      --text:        #e8eaf0;      /* Primary text */
+      --text-muted:  #7a819e;      /* Secondary / muted text */
+
+      /* Accent colors for each moderation decision */
+      --green:       #22d3a5;      /* APPROVED */
+      --yellow:      #f5c518;      /* REVIEW — intentional IMDb yellow reference */
+      --red:         #ef4545;      /* BLOCKED */
+      --blue:        #4a9eff;      /* Info / English */
+      --purple:      #a78bfa;      /* Hinglish */
+      --orange:      #fb923c;      /* Hindi */
+
+      /* Gradient used in the header */
+      --grad: linear-gradient(135deg, #4a9eff 0%, #a78bfa 50%, #22d3a5 100%);
+
+      --radius:      12px;
+      --radius-sm:   6px;
+      --font-display: 'Syne', sans-serif;
+      --font-body:   'Inter', sans-serif;
+      --font-mono:   'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ══ HEADER ══════════════════════════════════════════════════════ */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 24px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: var(--grad);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    .logo h1 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 800;
+      background: var(--grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo span {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      display: block;
+      margin-top: -4px;
+    }
+
+    .header-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      letter-spacing: 0.5px;
+      border: 1px solid;
+    }
+
+    .badge-en  { color: var(--blue);   border-color: var(--blue);   background: rgba(74,158,255,0.1); }
+    .badge-hi  { color: var(--orange); border-color: var(--orange); background: rgba(251,146,60,0.1); }
+    .badge-hl  { color: var(--purple); border-color: var(--purple); background: rgba(167,139,250,0.1); }
+
+    /* ══ MAIN LAYOUT ══════════════════════════════════════════════════ */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      header { padding: 16px 20px; }
+    }
+
+    /* ══ CARDS ════════════════════════════════════════════════════════ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    /* ══ TEXTAREA ════════════════════════════════════════════════════ */
+    .input-section { grid-column: 1 / -1; }  /* Full width on the grid */
+
+    textarea {
+      width: 100%;
+      height: 140px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 15px;
+      padding: 16px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: var(--blue); }
+    textarea::placeholder { color: var(--text-muted); }
+
+    /* ══ QUICK TEST BUTTONS ══════════════════════════════════════════ */
+    .quick-tests {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .quick-test-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    .quick-test-btn:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    /* ══ ANALYZE BUTTON ══════════════════════════════════════════════ */
+    .btn-analyze {
+      margin-top: 16px;
+      width: 100%;
+      padding: 14px;
+      background: var(--grad);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: #0d0f14;
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-analyze:hover  { opacity: 0.9; }
+    .btn-analyze:active { transform: scale(0.99); }
+    .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Loading spinner inside button */
+    .btn-analyze .spinner {
+      display: none;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(13,15,20,0.3);
+      border-top-color: #0d0f14;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto;
+    }
+    .btn-analyze.loading .btn-text { display: none; }
+    .btn-analyze.loading .spinner  { display: block; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ VERDICT CARD ════════════════════════════════════════════════ */
+    .verdict-card {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 20px 24px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      margin-bottom: 20px;
+      transition: all 0.4s;
+    }
+
+    .verdict-icon {
+      font-size: 48px;
+      line-height: 1;
+    }
+
+    .verdict-label {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .verdict-sub {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .verdict-card.approved { border-color: var(--green); background: rgba(34,211,165,0.06); }
+    .verdict-card.approved .verdict-label { color: var(--green); }
+    .verdict-card.review   { border-color: var(--yellow); background: rgba(245,197,24,0.06); }
+    .verdict-card.review   .verdict-label { color: var(--yellow); }
+    .verdict-card.blocked  { border-color: var(--red); background: rgba(239,69,69,0.06); }
+    .verdict-card.blocked  .verdict-label { color: var(--red); }
+
+    /* ══ LANGUAGE PILL ═══════════════════════════════════════════════ */
+    .lang-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      margin-bottom: 16px;
+    }
+    .lang-pill.en       { color: var(--blue);   background: rgba(74,158,255,0.12);   border: 1px solid rgba(74,158,255,0.3); }
+    .lang-pill.hi       { color: var(--orange); background: rgba(251,146,60,0.12);   border: 1px solid rgba(251,146,60,0.3); }
+    .lang-pill.hinglish { color: var(--purple); background: rgba(167,139,250,0.12);  border: 1px solid rgba(167,139,250,0.3); }
+    .lang-pill.other    { color: var(--text-muted); background: rgba(122,129,158,0.12); border: 1px solid rgba(122,129,158,0.3); }
+
+    /* ══ TOXICITY GAUGE (ARC) ════════════════════════════════════════ */
+    .gauge-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .gauge-svg { overflow: visible; }
+
+    .gauge-score-text {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 800;
+      fill: var(--text);
+    }
+
+    .gauge-label-text {
+      font-size: 11px;
+      fill: var(--text-muted);
+      font-family: var(--font-body);
+    }
+
+    /* ══ CATEGORY SCORE BARS ═════════════════════════════════════════ */
+    .score-bars { display: flex; flex-direction: column; gap: 10px; }
+
+    .score-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .score-label {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      width: 130px;
+      flex-shrink: 0;
+    }
+
+    .score-bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      width: 0%;
+    }
+
+    .score-value {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      width: 40px;
+      text-align: right;
+    }
+
+    /* ══ TRANSLATION BOX ═════════════════════════════════════════════ */
+    .translation-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .translation-box .label {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--purple);
+      margin-bottom: 6px;
+    }
+    .translation-box .translated-text {
+      color: var(--text);
+      font-style: italic;
+    }
+
+    /* ══ HISTORY TABLE ════════════════════════════════════════════════ */
+    .history-section { grid-column: 1 / -1; }
+
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat-chip {
+      flex: 1;
+      min-width: 100px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      text-align: center;
+    }
+    .stat-chip .num {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .stat-chip .lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .stat-chip.green .num { color: var(--green); }
+    .stat-chip.yellow .num { color: var(--yellow); }
+    .stat-chip.red .num { color: var(--red); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 12px;
+      border-bottom: 1px solid rgba(42,47,66,0.5);
+      vertical-align: middle;
+      max-width: 260px;
+    }
+    td .comment-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 240px;
+    }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .action-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+    .action-pill.APPROVED { color: var(--green);  background: rgba(34,211,165,0.15); }
+    .action-pill.REVIEW   { color: var(--yellow); background: rgba(245,197,24,0.15); }
+    .action-pill.BLOCKED  { color: var(--red);    background: rgba(239,69,69,0.15); }
+
+    /* ══ EMPTY STATE ═════════════════════════════════════════════════ */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state p { font-size: 14px; }
+
+    /* ══ PLACEHOLDER STATE ═══════════════════════════════════════════ */
+    .placeholder-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      min-height: 300px;
+    }
+    .placeholder-state .icon { font-size: 56px; margin-bottom: 16px; opacity: 0.3; }
+    .placeholder-state p { font-size: 14px; line-height: 1.8; }
+
+    /* ══ ERROR / INFO TOAST ══════════════════════════════════════════ */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      z-index: 1000;
+      max-width: 360px;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #toast.error   { background: rgba(239,69,69,0.9);    color: white; }
+    #toast.success { background: rgba(34,211,165,0.9);   color: #0d0f14; }
+    #toast.info    { background: rgba(74,158,255,0.9);   color: white; }
+
+    /* ══ REFRESH BTN ═════════════════════════════════════════════════ */
+    .btn-refresh {
+      padding: 8px 16px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.2s;
+      float: right;
+    }
+    .btn-refresh:hover { border-color: var(--blue); color: var(--blue); }
+
+    /* ══ CHAR COUNTER ════════════════════════════════════════════════ */
+    .char-counter {
+      text-align: right;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-family: var(--font-mono);
+    }
+    .char-counter.warning { color: var(--yellow); }
+    .char-counter.danger  { color: var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <h1>ToxiWatch</h1>
+      <span>Multilingual Comment Moderator</span>
+    </div>
+  </div>
+  <div class="header-badges">
+    <span class="badge badge-en">English</span>
+    <span class="badge badge-hi">हिन्दी</span>
+    <span class="badge badge-hl">Hinglish</span>
+  </div>
+</header>
+
+<!-- ══ MAIN CONTENT ═════════════════════════════════════════════════════════ -->
+<main>
+
+  <!-- ── Input Section (full width) ─────────────────────────────────────── -->
+  <section class="card input-section">
+    <div class="card-title">Submit Comment for Analysis</div>
+
+    <textarea
+      id="commentInput"
+      placeholder="Type a movie review comment... (English, Hindi, or Hinglish)"
+      maxlength="2000"
+    ></textarea>
+    <div class="char-counter" id="charCounter">0 / 2000</div>
+
+    <!-- Quick test buttons -->
+    <div class="quick-tests" id="quickTests">
+      <!-- Populated dynamically from /test-comments endpoint -->
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyzeComment()">
+      <span class="btn-text">🔍 Analyze Comment</span>
+      <div class="spinner"></div>
+    </button>
+  </section>
+
+  <!-- ── Results Panel ───────────────────────────────────────────────────── -->
+  <div class="card" id="resultsPanel">
+    <div class="card-title">Moderation Result</div>
+    <div class="placeholder-state" id="placeholderState">
+      <div class="icon">🔍</div>
+      <p>Submit a comment above<br>to see the moderation analysis.</p>
+    </div>
+    <div id="resultsContent" style="display:none">
+      <!-- Verdict -->
+      <div class="verdict-card" id="verdictCard">
+        <div class="verdict-icon" id="verdictIcon">—</div>
+        <div>
+          <div class="verdict-label" id="verdictLabel">—</div>
+          <div class="verdict-sub" id="verdictSub">—</div>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div id="langPill" class="lang-pill"></div>
+
+      <!-- Translation (shown only for Hindi/Hinglish) -->
+      <div class="translation-box" id="translationBox" style="display:none">
+        <div class="label">🌐 Translated to English</div>
+        <div class="translated-text" id="translatedText"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Gauge Panel ─────────────────────────────────────────────────────── -->
+  <div class="card" id="gaugePanel">
+    <div class="card-title">Toxicity Scores</div>
+    <div class="placeholder-state" id="gaugePlaceholder">
+      <div class="icon">📊</div>
+      <p>Scores will appear here<br>after analysis.</p>
+    </div>
+    <div id="gaugeContent" style="display:none">
+      <!-- Arc gauge -->
+      <div class="gauge-container">
+        <svg class="gauge-svg" width="200" height="120" viewBox="0 0 200 120">
+          <!-- Track arc (grey background) -->
+          <path id="gaugeTrack" d="" stroke="#2a2f42" stroke-width="14" fill="none" stroke-linecap="round"/>
+          <!-- Fill arc (coloured, animated) -->
+          <path id="gaugeFill"  d="" stroke="#22d3a5" stroke-width="14" fill="none" stroke-linecap="round"
+                stroke-dasharray="0 1000" style="transition: stroke-dasharray 1s ease, stroke 0.5s;"/>
+          <!-- Score number -->
+          <text x="100" y="100" text-anchor="middle" class="gauge-score-text" id="gaugeScoreText">0.00</text>
+          <text x="100" y="115" text-anchor="middle" class="gauge-label-text">TOXICITY SCORE</text>
+        </svg>
+      </div>
+
+      <!-- Category bars -->
+      <div class="score-bars" id="scoreBars"></div>
+    </div>
+  </div>
+
+  <!-- ── History Section (full width) ───────────────────────────────────── -->
+  <section class="card history-section">
+    <div class="card-title">
+      Moderation History
+      <button class="btn-refresh" onclick="loadHistory()">↺ Refresh</button>
+    </div>
+
+    <!-- Stats chips -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-chip">
+        <div class="num" id="statTotal">—</div>
+        <div class="lbl">TOTAL</div>
+      </div>
+      <div class="stat-chip green">
+        <div class="num" id="statApproved">—</div>
+        <div class="lbl">APPROVED</div>
+      </div>
+      <div class="stat-chip yellow">
+        <div class="num" id="statReview">—</div>
+        <div class="lbl">REVIEW</div>
+      </div>
+      <div class="stat-chip red">
+        <div class="num" id="statBlocked">—</div>
+        <div class="lbl">BLOCKED</div>
+      </div>
+    </div>
+
+    <!-- Log table -->
+    <div id="historyTableWrap">
+      <div class="empty-state">
+        <div class="icon">📋</div>
+        <p>No moderation logs yet.<br>Analyze a comment to get started.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ TOAST NOTIFICATION ═══════════════════════════════════════════════════ -->
+<div id="toast"></div>
+
+<!-- ══ JAVASCRIPT ════════════════════════════════════════════════════════════ -->
+<script>
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const API_BASE = "";  // Same origin (no need to prefix since FastAPI serves this)
+
+  // Category display config: label text, bar color
+  const CATEGORY_CONFIG = {
+    toxicity:        { label: "Toxicity",        color: "#ef4545" },
+    severe_toxicity: { label: "Severe Toxicity", color: "#c0392b" },
+    obscene:         { label: "Obscene",         color: "#fb923c" },
+    threat:          { label: "Threat",          color: "#f97316" },
+    insult:          { label: "Insult",          color: "#a78bfa" },
+    identity_attack: { label: "Identity Attack", color: "#ec4899" },
+    sexual_explicit: { label: "Sexual Explicit", color: "#f43f5e" },
+  };
+
+  // ── DOM Element References ─────────────────────────────────────────────────
+  const commentInput   = document.getElementById("commentInput");
+  const analyzeBtn     = document.getElementById("analyzeBtn");
+  const charCounter    = document.getElementById("charCounter");
+  const placeholderState = document.getElementById("placeholderState");
+  const resultsContent   = document.getElementById("resultsContent");
+  const gaugePlaceholder = document.getElementById("gaugePlaceholder");
+  const gaugeContent     = document.getElementById("gaugeContent");
+
+  // ── Character counter ──────────────────────────────────────────────────────
+  commentInput.addEventListener("input", () => {
+    const len = commentInput.value.length;
+    charCounter.textContent = `${len} / 2000`;
+    charCounter.className = len > 1800 ? "char-counter danger"
+                          : len > 1500 ? "char-counter warning"
+                          : "char-counter";
+  });
+
+  // ── Enter key shortcut (Ctrl+Enter or Cmd+Enter) ──────────────────────────
+  commentInput.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") analyzeComment();
+  });
+
+  // ── MAIN: Analyze Comment ──────────────────────────────────────────────────
+  async function analyzeComment() {
+    const comment = commentInput.value.trim();
+    if (!comment) { showToast("Please enter a comment first.", "error"); return; }
+
+    // Set button to loading state
+    analyzeBtn.disabled = true;
+    analyzeBtn.classList.add("loading");
+
+    try {
+      // POST to /moderate endpoint
+      const response = await fetch(`${API_BASE}/moderate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      renderResults(data);
+      loadHistory();  // Refresh history after new result
+      showToast("Analysis complete!", "success");
+
+    } catch (err) {
+      console.error(err);
+      showToast(`Error: ${err.message}`, "error");
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.classList.remove("loading");
+    }
+  }
+
+  // ── Render Results ─────────────────────────────────────────────────────────
+  function renderResults(data) {
+    // Show results panels
+    placeholderState.style.display = "none";
+    resultsContent.style.display   = "block";
+    gaugePlaceholder.style.display = "none";
+    gaugeContent.style.display     = "block";
+
+    // ── Verdict card ────────────────────────────────────────────────────────
+    const verdictCard  = document.getElementById("verdictCard");
+    const verdictIcon  = document.getElementById("verdictIcon");
+    const verdictLabel = document.getElementById("verdictLabel");
+    const verdictSub   = document.getElementById("verdictSub");
+
+    const actionConfig = {
+      APPROVED: { icon: "✅", cls: "approved", sub: "Safe to publish" },
+      REVIEW:   { icon: "⚠️", cls: "review",   sub: "Needs human review" },
+      BLOCKED:  { icon: "🚫", cls: "blocked",   sub: "Automatically rejected" },
+    };
+
+    const ac = actionConfig[data.action] || { icon: "❓", cls: "", sub: "Unknown" };
+    verdictCard.className  = `verdict-card ${ac.cls}`;
+    verdictIcon.textContent  = ac.icon;
+    verdictLabel.textContent = data.action;
+    verdictSub.textContent   = `Score: ${(data.toxicity_score * 100).toFixed(1)}% — ${ac.sub}`;
+
+    // ── Language pill ───────────────────────────────────────────────────────
+    const langPill = document.getElementById("langPill");
+    const langLabels = { en: "🇺🇸 English", hi: "🇮🇳 Hindi (हिन्दी)", hinglish: "🇮🇳 Hinglish", other: "🌐 Other" };
+    langPill.textContent  = langLabels[data.detected_language] || data.detected_language;
+    langPill.className    = `lang-pill ${data.detected_language}`;
+
+    // ── Translation box ─────────────────────────────────────────────────────
+    const translationBox = document.getElementById("translationBox");
+    const translatedText = document.getElementById("translatedText");
+    if (data.translated_comment) {
+      translationBox.style.display = "block";
+      translatedText.textContent   = data.translated_comment;
+    } else {
+      translationBox.style.display = "none";
+    }
+
+    // ── Arc gauge ───────────────────────────────────────────────────────────
+    renderGauge(data.toxicity_score, data.action);
+
+    // ── Score bars ──────────────────────────────────────────────────────────
+    renderScoreBars(data.scores);
+  }
+
+  // ── Arc Gauge (SVG) ────────────────────────────────────────────────────────
+  function renderGauge(score, action) {
+    // Arc parameters: half-circle from 180° to 0° (left to right)
+    const cx = 100, cy = 100, r = 75;
+    const startAngle = Math.PI;           // 180 degrees (left)
+    const endAngle   = 0;                 // 0 degrees (right)
+
+    // Convert polar to Cartesian coordinates
+    function polarToCart(angle) {
+      return {
+        x: cx + r * Math.cos(angle),
+        y: cy + r * Math.sin(angle)
+      };
+    }
+
+    const start = polarToCart(startAngle);
+    const end   = polarToCart(endAngle);
+    const arcPath = `M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${end.x} ${end.y}`;
+
+    // The arc circumference for a semi-circle = π × r
+    const arcLength = Math.PI * r;
+
+    // Filled portion = score × total arc length
+    const filled    = score * arcLength;
+    const remaining = arcLength - filled;
+
+    // Color based on action
+    const strokeColor = action === "APPROVED" ? "#22d3a5"
+                      : action === "REVIEW"   ? "#f5c518"
+                      : "#ef4545";
+
+    document.getElementById("gaugeTrack").setAttribute("d", arcPath);
+    const fillEl = document.getElementById("gaugeFill");
+    fillEl.setAttribute("d", arcPath);
+    fillEl.setAttribute("stroke", strokeColor);
+    // Use stroke-dasharray to animate the fill
+    // dasharray = "filled_length remaining_length"
+    fillEl.setAttribute("stroke-dasharray", `${filled} ${remaining + 1}`);
+
+    document.getElementById("gaugeScoreText").textContent = score.toFixed(2);
+    document.getElementById("gaugeScoreText").setAttribute("fill", strokeColor);
+  }
+
+  // ── Score Bars ─────────────────────────────────────────────────────────────
+  function renderScoreBars(scores) {
+    const container = document.getElementById("scoreBars");
+    container.innerHTML = "";
+
+    for (const [key, config] of Object.entries(CATEGORY_CONFIG)) {
+      const val = scores[key];
+      if (val === undefined || val === null) continue;
+
+      const percent = (val * 100).toFixed(1);
+
+      const row = document.createElement("div");
+      row.className = "score-row";
+      row.innerHTML = `
+        <span class="score-label">${config.label}</span>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" data-fill="${percent}"
+               style="background: ${config.color};"></div>
+        </div>
+        <span class="score-value">${percent}%</span>
+      `;
+      container.appendChild(row);
+    }
+
+    // Animate bars after they're in DOM
+    requestAnimationFrame(() => {
+      document.querySelectorAll(".score-bar-fill").forEach(el => {
+        el.style.width = el.dataset.fill + "%";
+      });
+    });
+  }
+
+  // ── Load History ───────────────────────────────────────────────────────────
+  async function loadHistory() {
+    try {
+      const [histRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/history?page=1&per_page=25`),
+        fetch(`${API_BASE}/stats`)
+      ]);
+
+      if (histRes.ok) {
+        const histData = await histRes.json();
+        renderHistoryTable(histData.logs);
+      }
+
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        document.getElementById("statTotal").textContent    = stats.total_moderated;
+        document.getElementById("statApproved").textContent = stats.approved;
+        document.getElementById("statReview").textContent   = stats.review;
+        document.getElementById("statBlocked").textContent  = stats.blocked;
+      }
+    } catch (err) {
+      console.warn("Could not load history:", err);
+    }
+  }
+
+  // ── Render History Table ───────────────────────────────────────────────────
+  function renderHistoryTable(logs) {
+    const wrap = document.getElementById("historyTableWrap");
+
+    if (!logs || logs.length === 0) {
+      wrap.innerHTML = `
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <p>No moderation logs yet.<br>Analyze a comment to get started.</p>
+        </div>`;
+      return;
+    }
+
+    const langLabels = { en: "English", hi: "Hindi", hinglish: "Hinglish", other: "Other" };
+
+    const rows = logs.map(log => `
+      <tr>
+        <td style="color:var(--text-muted);font-family:var(--font-mono)">#${log.id}</td>
+        <td><div class="comment-text" title="${escapeHtml(log.original_comment)}">${escapeHtml(log.original_comment)}</div></td>
+        <td style="font-family:var(--font-mono);font-size:11px">${langLabels[log.language] || log.language}</td>
+        <td style="font-family:var(--font-mono)">${(log.toxicity_score * 100).toFixed(1)}%</td>
+        <td><span class="action-pill ${log.action}">${log.action}</span></td>
+        <td style="color:var(--text-muted);font-size:11px">${formatTimestamp(log.timestamp)}</td>
+      </tr>
+    `).join("");
+
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Comment</th>
+            <th>Language</th>
+            <th>Score</th>
+            <th>Decision</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // ── Load Quick Test Buttons ────────────────────────────────────────────────
+  async function loadQuickTests() {
+    try {
+      const res = await fetch(`${API_BASE}/test-comments`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const container = document.getElementById("quickTests");
+      // Show a subset of quick-test buttons
+      const samples = [
+        data.test_comments.find(c => c.id === 1),   // English safe
+        data.test_comments.find(c => c.id === 9),   // English blocked
+        data.test_comments.find(c => c.id === 14),  // Hindi safe
+        data.test_comments.find(c => c.id === 18),  // Hindi blocked
+        data.test_comments.find(c => c.id === 20),  // Hinglish safe
+        data.test_comments.find(c => c.id === 27),  // Hinglish blocked
+        data.test_comments.find(c => c.id === 29),  // Mixed
+      ].filter(Boolean);
+
+      const labels = { en: "EN", hi: "HI", hinglish: "HL", mixed: "MX" };
+      const expectedColors = { APPROVED: "#22d3a5", REVIEW: "#f5c518", BLOCKED: "#ef4545" };
+
+      samples.forEach(sample => {
+        const btn = document.createElement("button");
+        btn.className    = "quick-test-btn";
+        btn.title        = sample.text;
+        const langLabel  = labels[sample.lang] || sample.lang.toUpperCase();
+        btn.textContent  = `[${langLabel}] ${sample.text.substring(0, 30)}${sample.text.length > 30 ? "…" : ""}`;
+        btn.style.setProperty("--expected-color", expectedColors[sample.expected] || "#7a819e");
+        btn.addEventListener("click", () => {
+          commentInput.value = sample.text;
+          commentInput.dispatchEvent(new Event("input"));
+          analyzeComment();
+        });
+        container.appendChild(btn);
+      });
+    } catch (e) {
+      console.warn("Could not load test comments:", e);
+    }
+  }
+
+  // ── Toast notification ─────────────────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg, type = "info") {
+    const toast = document.getElementById("toast");
+    toast.textContent = msg;
+    toast.className   = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.className = ""; }, 3000);
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function escapeHtml(text) {
+    return (text || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return "—";
+    try {
+      const d = new Date(ts.replace(" ", "T") + "Z");
+      return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return ts; }
+  }
+
+  // ── Initialize on page load ────────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", () => {
+    loadHistory();
+    loadQuickTests();
+  });
+</script>
+
+</body>
+</html>

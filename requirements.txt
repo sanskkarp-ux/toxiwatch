@@ -1,0 +1,70 @@
+# ══════════════════════════════════════════════════════════════════════
+# ToxiWatch — requirements.txt (REPAIRED)
+# ══════════════════════════════════════════════════════════════════════
+# Python 3.11 compatible. Tested on Windows.
+#
+# INSTALL WITH (mandatory — includes PyTorch CPU-only index):
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# If pip is not recognized:
+#   python -m pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# ══════════════════════════════════════════════════════════════════════
+
+# ── Web Framework ──────────────────────────────────────────────────────
+# FastAPI 0.111 works with Pydantic v2 natively
+fastapi==0.111.0
+
+# Uvicorn ASGI server (standard extras include websockets + httptools for speed)
+uvicorn[standard]==0.29.0
+
+# Required for form data / multipart uploads in FastAPI
+python-multipart==0.0.9
+
+# ── Toxicity Detection ─────────────────────────────────────────────────
+# Detoxify 0.5.2 — BERT-based toxicity classifier
+# FIX: detoxify requires transformers < 4.46; 4.41.2 is the safe choice
+detoxify==0.5.2
+
+# ── Machine Learning & NLP ─────────────────────────────────────────────
+# HuggingFace Transformers — for MarianMT translation model
+# FIX: pinned to 4.41.2 which is the last version compatible with detoxify 0.5.2
+transformers==4.41.2
+
+# Accelerate — optional but prevents HuggingFace warnings about device placement
+accelerate>=0.26.0
+
+# ── PyTorch ────────────────────────────────────────────────────────────
+# FIX: torch>=2.12.0 was INVALID (version does not exist).
+# Correct version is 2.3.1+cpu (CPU-only build, ~250MB vs ~2.5GB for CUDA).
+# Must install with --extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
+
+# ── SentencePiece ─────────────────────────────────────────────────────
+# Required tokenizer for MarianMT (Helsinki-NLP translation model)
+# FIX: sentencepiece==0.2.0 has no Windows binary wheel for Python 3.11.
+# 0.1.99 is the last stable version with pre-built Windows wheels.
+sentencepiece==0.1.99
+
+# ── Language Detection ─────────────────────────────────────────────────
+langdetect==1.0.9
+
+# ── Data Validation ────────────────────────────────────────────────────
+# Pydantic v2 — FastAPI 0.111 is fully compatible with Pydantic v2
+# FIX: models.py must use v2 API (@field_validator, model_config, etc.)
+pydantic==2.7.1
+
+# ── HTTP Client ────────────────────────────────────────────────────────
+# Required by FastAPI TestClient for testing
+httpx==0.27.0
+
+# ── Utilities ──────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── Numerical Computing ────────────────────────────────────────────────
+# FIX: numpy 1.26.4 is compatible with torch 2.3.x (torch 2.3 uses numpy <2.0)
+numpy==1.26.4
+
+# ── Testing ────────────────────────────────────────────────────────────
+pytest==8.2.2
+pytest-asyncio==0.23.7

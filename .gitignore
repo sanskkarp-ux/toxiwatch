@@ -1,0 +1,72 @@
+# ToxiWatch — .gitignore
+# ========================
+# This file tells git which files/folders to NOT track.
+
+# ── Python Virtual Environment ────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Python Cache ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Distribution / Build ──────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# ── SQLite Database ───────────────────────────────────────────────────
+# The DB is generated at runtime — don't track it in git
+*.db
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ── ML Model Cache ────────────────────────────────────────────────────
+# HuggingFace and PyTorch model weights download to these folders.
+# They are large binary files (~1 GB) — don't track in git.
+.cache/
+*.ckpt
+*.pt
+*.bin
+*.safetensors
+
+# ── Environment Files ─────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ── IDE & Editor ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# ── Test / Coverage ───────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Temporary / scratch files ─────────────────────────────────────────
+validate_repair.py
+endpoint_tests.py
+{app,static,tests,database}/
