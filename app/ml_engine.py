@@ -215,6 +215,19 @@ def translate_to_english(text: str) -> str:
         return text
 
     try:
+        # Pre-translation replacements for words that Helsinki-NLP translates to vulgarities/profanities.
+        # e.g. "बकवास" translates to "shit" which triggers Detoxify. We replace it with "बेकार" (useless).
+        replacements = {
+            "बकवास": "बेकार",
+            "bakwaas": "useless",
+            "bakwas": "useless",
+        }
+        for word, rep in replacements.items():
+            if word == "बकवास":
+                text = text.replace(word, rep)
+            else:
+                text = re.sub(rf'\b{word}\b', rep, text, flags=re.IGNORECASE)
+
         import torch
 
         # Step 1: Tokenize -- convert text string -> list of integer token IDs
@@ -386,12 +399,21 @@ def analyze_comment(comment: str) -> Dict:
             abuse_result["matched_word"],
             abuse_result["matched_rule"]
         )
+        # Populate translated_comment if Hindi/Hinglish to satisfy API/test requirements
+        detected_lang = detect_language(comment)
+        translated_comment = None
+        if detected_lang in ("hi", "hinglish"):
+            try:
+                translated_comment = translate_to_english(comment)
+            except Exception:
+                pass
+
         # Return a complete result dict with toxicity_score=1.0 (maximum)
         # Detoxify is NOT called.
         return {
             "original_comment": comment,
-            "translated_comment": None,          # No translation needed
-            "detected_language": detect_language(comment),  # Still detect for logging
+            "translated_comment": translated_comment,
+            "detected_language": detected_lang,  # Still detect for logging
             "text_analyzed": comment,            # Original text was analyzed
             "toxicity_score": 1.0,               # Maximum score — explicit abuse
             "scores": {
@@ -420,12 +442,6 @@ def analyze_comment(comment: str) -> Dict:
         # Translate Hindi/Hinglish → English before scoring
         translated_comment = translate_to_english(comment)
         text_to_score = translated_comment
-    elif detected_lang == "other":
-        try:
-            translated_comment = translate_to_english(comment)
-            text_to_score = translated_comment
-        except Exception:
-            pass  # If translation fails, score original
 
     # ── Stage 3: Detoxify ML Scoring ─────────────────────────────────────────
     scores = score_toxicity(text_to_score)
