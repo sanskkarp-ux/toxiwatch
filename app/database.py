@@ -24,6 +24,9 @@ TABLE SCHEMA (moderation_logs):
   toxicity_score    REAL    NOT NULL
   action            TEXT    NOT NULL
   scores_json       TEXT
+  matched_word      TEXT              ← NEW: word/phrase that triggered the filter
+  matched_rule      TEXT              ← NEW: rule name that triggered (e.g. word_pattern:madarchod)
+  blocked_by        TEXT              ← NEW: 'Keyword Filter' or 'Detoxify'
   timestamp         DATETIME DEFAULT CURRENT_TIMESTAMP
 """
 
@@ -93,9 +96,17 @@ def init_db():
                 toxicity_score    REAL    NOT NULL,
                 action            TEXT    NOT NULL,
                 scores_json       TEXT,
+                matched_word      TEXT,
+                matched_rule      TEXT,
+                blocked_by        TEXT,
                 timestamp         DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Safe migration: add new columns if they don't exist yet.
+        # This is safe to run on existing databases — SQLite ignores
+        # ALTER TABLE if wrapped in try/except for OperationalError.
+        _migrate_columns(cursor)
 
         # Create an index on (action, timestamp) for faster stats/history queries
         cursor.execute("""
@@ -114,19 +125,43 @@ def init_db():
         conn.close()
 
 
+def _migrate_columns(cursor: sqlite3.Cursor) -> None:
+    """
+    Safely add new columns to an existing database without destroying data.
+
+    SQLite does not support IF NOT EXISTS for ALTER TABLE, so we attempt
+    each ALTER and silently ignore OperationalError (column already exists).
+
+    Called automatically from init_db() on every startup — idempotent.
+    """
+    new_columns = [
+        ("matched_word", "TEXT"),
+        ("matched_rule", "TEXT"),
+        ("blocked_by",   "TEXT"),
+    ]
+    for col_name, col_type in new_columns:
+        try:
+            cursor.execute(
+                f"ALTER TABLE moderation_logs ADD COLUMN {col_name} {col_type}"
+            )
+            logger.info("[DB] Migration: added column '%s'.", col_name)
+        except sqlite3.OperationalError:
+            pass  # Column already exists — no action needed
+
+
 def save_moderation_result(
     original_comment: str,
     translated_comment: Optional[str],
     language: str,
     toxicity_score: float,
     action: str,
-    scores: Dict
+    scores: Dict,
+    matched_word: Optional[str] = None,
+    matched_rule: Optional[str] = None,
+    blocked_by: Optional[str] = None,
 ) -> int:
     """
     Save a moderation result to the database.
-
-    This is called after every successful /moderate request.
-    We store all fields so that the /history endpoint can replay them.
 
     Args:
         original_comment:   The raw comment submitted by the user.
@@ -135,6 +170,9 @@ def save_moderation_result(
         toxicity_score:     The primary toxicity float score (0.0-1.0).
         action:             Moderation decision ("APPROVED", "REVIEW", "BLOCKED").
         scores:             Full dict of all category scores.
+        matched_word:       The abuse word/phrase that triggered the keyword filter (or None).
+        matched_rule:       The rule name that triggered (or None).
+        blocked_by:         'Keyword Filter' or 'Detoxify' (or None).
 
     Returns:
         The auto-generated ID of the newly inserted row.
@@ -147,15 +185,19 @@ def save_moderation_result(
         cursor.execute("""
             INSERT INTO moderation_logs
                 (original_comment, translated_comment, language,
-                 toxicity_score, action, scores_json)
-            VALUES (?, ?, ?, ?, ?, ?)
+                 toxicity_score, action, scores_json,
+                 matched_word, matched_rule, blocked_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             original_comment,
             translated_comment,
             language,
             toxicity_score,
             action,
-            json.dumps(scores)   # Store dict as JSON string
+            json.dumps(scores),   # Store dict as JSON string
+            matched_word,
+            matched_rule,
+            blocked_by,
         ))
 
         conn.commit()
@@ -193,7 +235,8 @@ def get_moderation_history(limit: int = 100, offset: int = 0) -> List[Dict]:
         cursor.execute("""
             SELECT
                 id, original_comment, translated_comment, language,
-                toxicity_score, action, scores_json, timestamp
+                toxicity_score, action, scores_json,
+                matched_word, matched_rule, blocked_by, timestamp
             FROM moderation_logs
             ORDER BY id DESC
             LIMIT ? OFFSET ?

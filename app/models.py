@@ -138,6 +138,20 @@ class ModerationResponse(BaseModel):
         description="Database ID of the saved moderation log entry."
     )
 
+    # ── Hybrid Filter metadata ────────────────────────────────────────────────
+    matched_word: Optional[str] = Field(
+        None,
+        description="The abuse word/phrase matched by the Keyword Filter (None if Detoxify decided)."
+    )
+    matched_rule: Optional[str] = Field(
+        None,
+        description="The specific rule that triggered in the Keyword Filter."
+    )
+    blocked_by: Optional[str] = Field(
+        None,
+        description="Which system made the BLOCKED decision: 'Keyword Filter' or 'Detoxify'."
+    )
+
 
 class ModerationLogEntry(BaseModel):
     """
@@ -151,6 +165,9 @@ class ModerationLogEntry(BaseModel):
     toxicity_score: float
     action: str
     scores: Optional[Dict[str, float]] = None
+    matched_word: Optional[str] = None
+    matched_rule: Optional[str] = None
+    blocked_by: Optional[str] = None
     timestamp: Optional[str] = None
 
 

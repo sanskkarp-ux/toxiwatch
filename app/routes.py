@@ -55,45 +55,43 @@ router = APIRouter()
     summary="Analyze a comment for toxicity",
     description=(
         "Submit a comment (English, Hindi, or Hinglish) to be analyzed. "
-        "Automatically detects language, translates if needed, scores with Detoxify, "
-        "and returns the moderation decision."
+        "First runs the Hybrid Keyword Abuse Filter (instant BLOCK for explicit abuse). "
+        "If not caught, runs Detoxify ML scoring for nuanced decisions."
     )
 )
 async def moderate_comment(request: CommentRequest):
     """
-    Main moderation endpoint.
+    Main moderation endpoint — Hybrid Pipeline.
 
     Flow:
         1. Receive comment from frontend (JSON body).
-        2. Run the full ML pipeline via analyze_comment().
-        3. Save result to SQLite database.
-        4. Return structured response.
-
-    Pydantic automatically validates the request body:
-        - 'comment' must be a non-empty string (enforced by CommentRequest model)
-        - If validation fails, FastAPI returns 422 Unprocessable Entity automatically
+        2. Run Hybrid Abuse Filter (keyword/regex). If blocked → skip step 3.
+        3. Run Detoxify ML pipeline (language detection + translation + scoring).
+        4. Save result to SQLite database.
+        5. Return structured response.
     """
-    logger.info(f"📥 Received comment for moderation: '{request.comment[:80]}...'")
+    logger.info("[Moderate] Received: '%.80s'...", request.comment)
 
     try:
-        # ── Run the ML pipeline ───────────────────────────────────────────────
-        # analyze_comment() is the "master function" in ml_engine.py
-        # It handles: detection → translation → scoring → decision
+        # ── Run the Hybrid Moderation Pipeline ───────────────────────────────
+        # Phase 1: Keyword abuse filter (app/abuse_filter.py)
+        # Phase 2: Detoxify ML model (only if Phase 1 did not block)
         result = analyze_comment(request.comment)
 
         # ── Save to database ──────────────────────────────────────────────────
-        # Store the result so we can show it in /history
         log_id = save_moderation_result(
             original_comment=result["original_comment"],
             translated_comment=result["translated_comment"],
             language=result["detected_language"],
             toxicity_score=result["toxicity_score"],
             action=result["action"],
-            scores=result["scores"]
+            scores=result["scores"],
+            matched_word=result.get("matched_word"),
+            matched_rule=result.get("matched_rule"),
+            blocked_by=result.get("blocked_by"),
         )
 
         # ── Build and return the response ─────────────────────────────────────
-        # This dict matches the ModerationResponse Pydantic model
         response_data = {
             "original_comment": result["original_comment"],
             "translated_comment": result["translated_comment"],
@@ -103,21 +101,23 @@ async def moderate_comment(request: CommentRequest):
             "scores": result["scores"],
             "action": result["action"],
             "log_id": log_id,
+            "matched_word": result.get("matched_word"),
+            "matched_rule": result.get("matched_rule"),
+            "blocked_by": result.get("blocked_by"),
         }
 
         logger.info(
-            f"✅ Moderation complete — "
-            f"lang={result['detected_language']}, "
-            f"score={result['toxicity_score']:.4f}, "
-            f"action={result['action']}"
+            "[Moderate] Done | lang=%s | score=%.4f | action=%s | blocked_by=%s",
+            result["detected_language"],
+            result["toxicity_score"],
+            result["action"],
+            result.get("blocked_by", "N/A"),
         )
 
         return response_data
 
     except Exception as e:
-        # If anything goes wrong in the ML pipeline, return a 500 error
-        # HTTPException is FastAPI's way of returning error responses
-        logger.error(f"❌ Moderation failed: {e}", exc_info=True)
+        logger.error("[Moderate] Failed: %s", str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Moderation processing failed: {str(e)}"
@@ -163,7 +163,7 @@ async def get_history(
         }
 
     except Exception as e:
-        logger.error(f"❌ History fetch failed: {e}", exc_info=True)
+        logger.error("[History] Fetch failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
 
 
@@ -206,7 +206,7 @@ async def get_stats():
         }
 
     except Exception as e:
-        logger.error(f"❌ Stats fetch failed: {e}", exc_info=True)
+        logger.error("[Stats] Fetch failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
 
 

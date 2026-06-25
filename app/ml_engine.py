@@ -342,51 +342,99 @@ def analyze_comment(comment: str) -> Dict:
     """
     Master function that orchestrates the full moderation pipeline.
 
-    Pipeline:
-        1. Detect language
-        2. If Hindi/Hinglish -> translate to English
-        3. Score toxicity on the English text
-        4. Determine moderation action
-        5. Return structured result
+    Pipeline (Hybrid Abuse Detection Layer):
+        ─────────────────────────────────────────────────────────────
+        User Comment
+              │
+              ▼
+        Text Normalization
+              │
+              ▼
+        Hybrid Abuse Filter  ←── Stage 0 (NEW)
+              │
+        ┌─────┴─────┐
+        │ Abuse     │ No Abuse
+        │ Detected  │ Detected
+        ▼           ▼
+        BLOCK       Language Detection
+        (skip       Translation (if needed)
+        Detoxify)   Detoxify ML Scoring
+                    Moderation Decision
+        ─────────────────────────────────────────────────────────────
 
     Args:
         comment: The raw user-submitted comment string.
 
     Returns:
-        A dictionary with all moderation details.
+        A dictionary with all moderation details including:
+            original_comment, translated_comment, detected_language,
+            text_analyzed, toxicity_score, scores, action,
+            matched_word, matched_rule, blocked_by
     """
-    # ── Step 1: Language Detection ─────────────────────────────────────────────
+    # ── Stage 0: Hybrid Abuse Filter ──────────────────────────────────────────
+    # Run BEFORE any ML inference. If it fires, skip Detoxify entirely.
+    # This ensures explicit abuse (madarchod, bhenchod, etc.) is always BLOCKED
+    # regardless of how the ML model scores it.
+    from app.abuse_filter import check_abuse
+
+    abuse_result = check_abuse(comment)
+
+    if abuse_result["blocked"]:
+        # Abuse filter fired — block immediately, skip Detoxify
+        logger.info(
+            "[Pipeline] BLOCKED by Keyword Filter | word='%s' | rule='%s'",
+            abuse_result["matched_word"],
+            abuse_result["matched_rule"]
+        )
+        # Return a complete result dict with toxicity_score=1.0 (maximum)
+        # Detoxify is NOT called.
+        return {
+            "original_comment": comment,
+            "translated_comment": None,          # No translation needed
+            "detected_language": detect_language(comment),  # Still detect for logging
+            "text_analyzed": comment,            # Original text was analyzed
+            "toxicity_score": 1.0,               # Maximum score — explicit abuse
+            "scores": {
+                "toxicity": 1.0,
+                "severe_toxicity": 1.0,
+                "obscene": 1.0,
+                "threat": 0.0,
+                "insult": 1.0,
+                "identity_attack": 0.0,
+            },
+            "action": "BLOCKED",
+            "matched_word": abuse_result["matched_word"],
+            "matched_rule": abuse_result["matched_rule"],
+            "blocked_by": "Keyword Filter",
+        }
+
+    # ── Stage 1: Language Detection ───────────────────────────────────────────
     detected_lang = detect_language(comment)
-    # FIX: Use %s formatting to avoid potential Unicode issues with f-strings in logs
     logger.info("Detected language: %s for: '%.60s'", detected_lang, comment)
 
-    # ── Step 2: Translation (if needed) ───────────────────────────────────────
+    # ── Stage 2: Translation (if needed) ─────────────────────────────────────
     translated_comment = None   # Only set if translation happens
     text_to_score = comment     # Default: score the original text
 
     if detected_lang in ("hi", "hinglish"):
-        # Translate Hindi/Hinglish -> English before scoring
+        # Translate Hindi/Hinglish → English before scoring
         translated_comment = translate_to_english(comment)
-        text_to_score = translated_comment  # Score the translated text
+        text_to_score = translated_comment
     elif detected_lang == "other":
-        # For unsupported languages, attempt translation anyway
-        # (the model handles many languages, though quality may vary)
         try:
             translated_comment = translate_to_english(comment)
             text_to_score = translated_comment
         except Exception:
             pass  # If translation fails, score original
 
-    # ── Step 3: Toxicity Scoring ──────────────────────────────────────────────
+    # ── Stage 3: Detoxify ML Scoring ─────────────────────────────────────────
     scores = score_toxicity(text_to_score)
-
-    # The primary toxicity score (the most general one)
     primary_toxicity_score = scores.get("toxicity", 0.0)
 
-    # ── Step 4: Moderation Decision ───────────────────────────────────────────
+    # ── Stage 4: Moderation Decision ─────────────────────────────────────────
     action = get_moderation_action(primary_toxicity_score)
 
-    # ── Step 5: Build and return result ───────────────────────────────────────
+    # ── Stage 5: Build and return result ─────────────────────────────────────
     return {
         "original_comment": comment,
         "translated_comment": translated_comment,
@@ -395,4 +443,8 @@ def analyze_comment(comment: str) -> Dict:
         "toxicity_score": primary_toxicity_score,
         "scores": scores,
         "action": action,
+        "matched_word": None,            # Abuse filter did not fire
+        "matched_rule": None,
+        "blocked_by": "Detoxify",        # Detoxify was the decision-maker
     }
+
